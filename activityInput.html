@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Attraction Data Editor - Final</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      background: #f5f7fa;
+      color: #333;
+    }
+
+    h1, h2 {
+      color: #2c3e50;
+    }
+
+    .section {
+      background: white;
+      padding: 20px;
+      margin-bottom: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    input[type="text"],
+    textarea,
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .attraction-form {
+      margin-top: 20px;
+      border-top: 1px solid #ddd;
+      padding-top: 20px;
+    }
+
+    .grid {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .half {
+      flex: 1;
+      min-width: 300px;
+    }
+
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    .copy-btn {
+      background-color: #2ecc71;
+      margin-left: 10px;
+    }
+
+    .copy-btn:hover {
+      background-color: #27ae60;
+    }
+
+    #output {
+      white-space: pre-wrap;
+      background: #eef1f5;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+
+    .preview-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ccc;
+      min-height: 100px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Attraction Data Editor</h1>
+
+<div class="section">
+  <label for="prefillJSON">Paste JSON to Prefill (Optional)</label>
+  <textarea id="prefillJSON" rows="4" placeholder='Paste your JSON here to load existing attractions'></textarea>
+  <button onclick="loadFromJSON()">Load Attractions</button>
+</div>
+
+<div class="section">
+  <div class="grid">
+    <div class="half">
+      <label for="defaultCity">Default City (used if not set per attraction)</label>
+      <input type="text" id="defaultCity" placeholder="e.g., Chicago_United_States" />
+    </div>
+    <div class="half">
+      <label for="defaultDay">Default Day (used if not set per attraction)</label>
+      <input type="text" id="defaultDay" placeholder="e.g., 1. Cultural Highlights" />
+    </div>
+  </div>
+</div>
+
+<div id="attractions-container"></div>
+
+<button onclick="addAttraction()">Add New Attraction</button>
+<button onclick="generateJSON()">Generate JSON</button>
+
+<div class="section">
+  <h2>Generated JSON Output:</h2>
+  <button class="copy-btn" onclick="copyOutput()">Copy to Clipboard</button>
+  <div id="output"></div>
+</div>
+
+<script>
+  let attractionCount = 0;
+
+  function extractCoordinatesFromMapUrl(url) {
+    const atIndex = url.indexOf("@");
+    if (atIndex === -1) return { lat: "", lng: "" };
+
+    const rest = url.slice(atIndex + 1).split(",");
+    const lat = parseFloat(rest[0]);
+    const lng = parseFloat(rest[1]);
+
+    return { lat, lng };
+  }
+
+  function addAttraction(data = {}) {
+    attractionCount++;
+    const container = document.getElementById("attractions-container");
+    const form = document.createElement("div");
+    form.className = "attraction-form section";
+
+    const defaultCity = document.getElementById("defaultCity").value.trim();
+    const defaultDay = document.getElementById("defaultDay").value.trim();
+
+    const name = data.name || "";
+    const slug = name.replace(/\s+/g, "_") || "NewAttraction";
+    const key = `${String(100 + attractionCount)}_${slug}`;
+
+    form.innerHTML = `
+      <h3>Attraction ${attractionCount}</h3>
+      <label>Name</label>
+      <input type="text" data-field="name" value="${data.name || ""}">
+
+      <label>Description (HTML allowed)</label>
+      <textarea data-field="description">${data.description || ""}</textarea>
+      <small>Live Preview:</small>
+      <div class="preview-box">${data.description || ""}</div>
+
+      <label>Review</label>
+      <input type="text" data-field="review" value="${data.review || ""}">
+
+      <label>Category</label>
+      <input type="text" data-field="category" value="${data.category || ""}">
+
+      <label>Time of Day</label>
+      <input type="text" data-field="time" value="${data.time || ""}">
+
+      <label>Hours Spent</label>
+      <input type="text" data-field="hours" value="${data.hours || ""}">
+
+      <label>Sequence</label>
+      <input type="number" data-field="sequence" value="${data.sequence || ""}">
+
+      <label>Latitude</label>
+      <input type="text" data-field="latitude" value="${(data.coordinates?.value?._latitude) || ""}" readonly>
+
+      <label>Longitude</label>
+      <input type="text" data-field="longitude" value="${(data.coordinates?.value?._longitude) || ""}" readonly>
+
+      <label>Map URL</label>
+      <input type="text" data-field="mapurl" value="${data.mapurl || ""}">
+
+      <label>Website</label>
+      <input type="text" data-field="website" value="${data.website || ""}">
+
+      <label>Price Level (0=Free, 1–3)</label>
+      <input type="number" min="0" max="3" data-field="price" value="${data.price !== undefined ? data.price : ""}">
+
+      <label>City</label>
+      <input type="text" data-field="city" value="${data.city || defaultCity || ""}">
+
+      <label>Day</label>
+      <input type="text" data-field="day" value="${data.day || defaultDay || ""}">
+    `;
+
+    container.appendChild(form);
+
+    // Live preview for description
+    const textarea = form.querySelector("[data-field='description']");
+    const preview = form.querySelectorAll(".preview-box")[0];
+    textarea.addEventListener("input", () => {
+      preview.innerHTML = textarea.value;
+    });
+
+    // Auto-extract coordinates
+    const mapUrlInput = form.querySelector("[data-field='mapurl']");
+    const latInput = form.querySelector("[data-field='latitude']");
+    const lngInput = form.querySelector("[data-field='longitude']");
+
+    mapUrlInput.addEventListener("input", () => {
+      const coords = extractCoordinatesFromMapUrl(mapUrlInput.value);
+      latInput.value = coords.lat;
+      lngInput.value = coords.lng;
+    });
+  }
+
+  function loadFromJSON() {
+    try {
+      const jsonStr = document.getElementById("prefillJSON").value;
+      const data = JSON.parse(jsonStr);
+
+      document.getElementById("attractions-container").innerHTML = "";
+      attractionCount = 0;
+
+      Object.keys(data).forEach(key => {
+        addAttraction(data[key]);
+      });
+    } catch (e) {
+      alert("Invalid JSON format. Please check your input.");
+    }
+  }
+
+  function generateJSON() {
+  const defaultCity = document.getElementById("defaultCity").value.trim();
+  const defaultDay = document.getElementById("defaultDay").value.trim();
+
+  const output = {};
+  const forms = document.querySelectorAll(".attraction-form");
+
+  // Group attractions by day
+  const groupedByDay = {};
+
+  Array.from(forms).forEach(form => {
+    const fields = form.querySelectorAll("[data-field]");
+    const data = {};
+
+    fields.forEach(field => {
+      const key = field.getAttribute("data-field");
+      let value = field.value.trim();
+
+      if (key === "latitude" || key === "longitude") {
+        value = parseFloat(value);
+      } else if (key === "sequence" || key === "price") {
+        value = parseInt(value, 10) || 0;
+      }
+
+      if (key === "name") data.name = value;
+      else if (key === "description") data.description = value;
+      else if (key === "review") data.review = value;
+      else if (key === "category") data.category = value;
+      else if (key === "time") data.time = value;
+      else if (key === "hours") data.hours = value;
+      else if (key === "sequence") data.sequence = value;
+      else if (key === "latitude") {
+        if (!data.coordinates) data.coordinates = { value: {} };
+        data.coordinates.value._latitude = value;
+      } else if (key === "longitude") {
+        if (!data.coordinates) data.coordinates = { value: {} };
+        data.coordinates.value._longitude = value;
+      } else if (key === "mapurl") data.mapurl = value;
+      else if (key === "website") data.website = value;
+      else if (key === "price") data.price = value;
+      else if (key === "city") data.city = value || defaultCity;
+      else if (key === "day") data.day = value || defaultDay;
+    });
+
+    data.__collections__ = {};
+
+    const day = data.day || "Unknown Day";
+    if (!groupedByDay[day]) {
+      groupedByDay[day] = [];
+    }
+    groupedByDay[day].push(data);
+  });
+
+  // Process each day group and assign proper index
+  Object.keys(groupedByDay).forEach(day => {
+    const attractions = groupedByDay[day];
+    const dayNumberMatch = day.match(/^(\d+)/);
+    const dayNumber = dayNumberMatch ? parseInt(dayNumberMatch[1], 10) : 99;
+    const baseIndex = dayNumber * 100 + 1;
+
+    attractions.forEach((data, index) => {
+      const slug = data.name.replace(/\s+/g, "_") || "Unnamed";
+      const key = `${String(baseIndex + index)}_${slug}`;
+      output[key] = data;
+    });
+  });
+
+  const jsonOutput = JSON.stringify(output, null, 2);
+  document.getElementById("output").textContent = jsonOutput;
+}
+
+  function copyOutput() {
+    const outputDiv = document.getElementById("output");
+    const range = document.createRange();
+    range.selectNodeContents(outputDiv);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    try {
+      document.execCommand("copy");
+      alert("JSON copied to clipboard!");
+    } catch (err) {
+      alert("Failed to copy JSON.");
+    } finally {
+      selection.removeAllRanges();
+    }
+  }
+</script>
+
+</body>
+</html>
